@@ -35,6 +35,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
   final Location _locationService = Location();
   final TextEditingController _searchController = TextEditingController();
   bool _usingCurrentLocation = true;
+  String? _cityName; // <-- Add this line
 
   @override
   void initState() {
@@ -47,6 +48,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
       _isLoading = true;
       _error = null;
       _usingCurrentLocation = true;
+      _cityName = null; // Reset city name
     });
 
     try {
@@ -70,6 +72,11 @@ class _WeatherScreenState extends State<WeatherScreen> {
       if (locationData.latitude == null || locationData.longitude == null) {
         throw Exception('Failed to get location coordinates');
       }
+      // Get city name using reverse geocoding
+      await _fetchCityNameFromCoords(
+        locationData.latitude!,
+        locationData.longitude!,
+      );
       await _fetchWeatherData(
         lat: locationData.latitude!,
         lon: locationData.longitude!,
@@ -82,11 +89,32 @@ class _WeatherScreenState extends State<WeatherScreen> {
     }
   }
 
+  Future<void> _fetchCityNameFromCoords(double lat, double lon) async {
+    try {
+      const apiKey = '4361cda5ae1cfe6f2ff8a3f578b6c773';
+      final url = Uri.parse(
+        'https://api.openweathermap.org/geo/1.0/reverse?lat=$lat&lon=$lon&limit=1&appid=$apiKey',
+      );
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data.isNotEmpty && data[0]['name'] != null) {
+          setState(() {
+            _cityName = data[0]['name'];
+          });
+        }
+      }
+    } catch (_) {
+      // ignore errors, city name will be null
+    }
+  }
+
   Future<void> _fetchWeatherByCity(String city) async {
     setState(() {
       _isLoading = true;
       _error = null;
       _usingCurrentLocation = false;
+      _cityName = city; // <-- Set city name
     });
 
     try {
@@ -103,6 +131,12 @@ class _WeatherScreenState extends State<WeatherScreen> {
         }
         final lat = geoData[0]['lat'];
         final lon = geoData[0]['lon'];
+        // Optionally update city name from geoData
+        if (geoData[0]['name'] != null) {
+          setState(() {
+            _cityName = geoData[0]['name'];
+          });
+        }
         await _fetchWeatherData(lat: lat, lon: lon);
       } else {
         throw Exception('Failed to find city: ${geoResponse.statusCode}');
@@ -249,6 +283,15 @@ class _WeatherScreenState extends State<WeatherScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const SizedBox(height: 20),
+            if (_cityName != null)
+              Text(
+                _cityName!,
+                style: const TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue,
+                ),
+              ),
             Text(
               'Current Weather',
               style: TextStyle(
